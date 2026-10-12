@@ -1,4 +1,5 @@
-build/
-.waf*
-.lock*
-*.pyc
+/.idea/shelf/
+/.idea/editor.xml
+/.idea/workspace.xml
+
+/Build/
