@@ -722,6 +722,22 @@ static qboolean ParseStage( shaderStage_t *stage, char **text )
 
 			atestBits = NameToAFunc( token );
 		}
+		else if( !Q_stricmp( token, "alphatest" )) // alphatest greaterequal <ref>
+		{
+			token = COM_ParseExt( text, qfalse );
+
+			if( !Q_stricmp( token, "greaterequal" ) || !Q_stricmp( token, "greater" ))
+			{
+				atestBits = GLS_ATEST_GE_80;
+				token = COM_ParseExt( text, qfalse );
+				stage->alphaTestRef = token[0] ? atof( token ) : 0.5f;
+			}
+			else
+			{
+				ri.Printf( PRINT_WARNING, "WARNING: unsupported alphatest function '%s' in shader '%s'\n", token, shader.name );
+				SkipRestOfLine( text );
+			}
+		}
 		else if( !Q_stricmp( token, "depthfunc" )) // depthFunc <func>
 		{
 			token = COM_ParseExt( text, qfalse );
@@ -1154,6 +1170,16 @@ static void ParseDeform( char **text )
 		return;
 	}
 
+	// FAKK2: deformVertexes wavenormal <spread> <x> <y> <z> <func> <base> <amp> <phase> <freq>
+	// It animates the vertex normals (for tcGen environment on water), not the
+	// positions. Not implemented: accept the line and apply no deformation.
+	if( !Q_stricmp( token, "wavenormal" ))
+	{
+		SkipRestOfLine( text );
+		shader.numDeforms--;
+		return;
+	}
+
 	if( !Q_stricmp( token, "autosprite" ))
 	{
 		ds->deformation = DEFORM_AUTOSPRITE;
@@ -1529,7 +1555,9 @@ static qboolean ParseShader( char **text )
 		{
 			if( !Q_stricmp( token, "surfaceParm" ))
 			{
-				token = COM_ParseExt( text, qfalse );
+				// ParseSurfaceParm() reads the name itself. An extra token read
+				// here swallowed it, so no surfaceparm (sky, nodraw, trans,
+				// water, ...) was ever applied.
 				ParseSurfaceParm( text, &shader.surfaceFlags, &shader.contentFlags );
 			}
 			else
@@ -2724,6 +2752,7 @@ shader_t *R_FindShader( const char *name, int lightmapIndex, qboolean mipRawImag
 		if( !ParseShader( &shaderText ))
 		{
 			// had errors, so use default shader
+			ri.Printf( PRINT_WARNING, "WARNING: shader '%s' failed to parse, using the default shader\n", name );
 			shader.defaultShader = qtrue;
 		}
 
@@ -3196,8 +3225,10 @@ void InitStaticShaders( void )
 void R_SetupShaders( void )
 {
 	ri.Printf( PRINT_ALL, "Setting up Shaders\n" );
-	s_shaderText = NULL;
-	Com_Memset( hashTable, 0, sizeof( hashTable ));
+
+	// R_StartupShaders() has just built the table of all shader scripts.
+	// This used to wipe it (and forget the script text) again, so no shader
+	// script was ever used: every surface fell back to a plain image.
 	CreateInternalShaders();
 	InitStaticShaders();
 	CreateExternalShaders();
@@ -3231,7 +3262,7 @@ void R_ShutdownShaders( void )
 
 	for( int i = 0; i < FILE_HASH_SIZE; i++ )
 	{
-		while( hashTable[i]->shader )
+		while( hashTable[i] )
 		{
 			shadertext_t *ptr = hashTable[i];
 			hashTable[i] = ptr->next;

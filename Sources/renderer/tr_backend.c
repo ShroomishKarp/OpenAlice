@@ -212,11 +212,23 @@ void GL_TexEnv( int env )
 ** This routine is responsible for setting the most commonly changed state
 ** in Q3.
 */
+/*
+** Set the state of a shader stage. The alpha test reference is not part
+** of the state bits (they only know the fixed 0.5 for GE_80), so it is
+** passed alongside for the duration of the call.
+*/
+void GL_StageState( const shaderStage_t *stage )
+{
+	glState.stageAlphaRef = stage->alphaTestRef;
+	GL_State( stage->stateBits );
+	glState.stageAlphaRef = 0;
+}
+
 void GL_State( unsigned long stateBits )
 {
 	unsigned long diff = stateBits ^ glState.glStateBits;
 
-	if( !diff )
+	if( !diff && ( stateBits & GLS_ATEST_BITS ) != GLS_ATEST_GE_80 )
 	{
 		return;
 	}
@@ -379,18 +391,33 @@ void GL_State( unsigned long stateBits )
 		case GLS_ATEST_GT_0:
 			qglEnable( GL_ALPHA_TEST );
 			qglAlphaFunc( GL_GREATER, 0.0f );
+			glState.alphaRef = -1.0f;
 			break;
 		case GLS_ATEST_LT_80:
 			qglEnable( GL_ALPHA_TEST );
 			qglAlphaFunc( GL_LESS, 0.5f );
+			glState.alphaRef = -1.0f;
 			break;
 		case GLS_ATEST_GE_80:
 			qglEnable( GL_ALPHA_TEST );
 			qglAlphaFunc( GL_GEQUAL, 0.5f );
+			glState.alphaRef = 0.5f;
 			break;
 		default:
 			assert( 0 );
 			break;
+		}
+	}
+
+	// GE_80 uses 0.5 unless the stage asked for a different reference
+	if(( stateBits & GLS_ATEST_BITS ) == GLS_ATEST_GE_80 )
+	{
+		float ref = glState.stageAlphaRef > 0 ? glState.stageAlphaRef : 0.5f;
+
+		if( ref != glState.alphaRef )
+		{
+			qglAlphaFunc( GL_GEQUAL, ref );
+			glState.alphaRef = ref;
 		}
 	}
 
@@ -955,12 +982,21 @@ const void *RB_DrawBuffer( const void *data )
 
 	qglDrawBuffer( cmd->buffer );
 
-	// clear screen for debugging
+	// Always start the frame with a cleared color buffer. Quake 3 only did
+	// that for r_clear (debugging) because the sky box covers every pixel the
+	// world does not. Here sky surfaces don't draw color (portal sky is not
+	// implemented), so without it stale pixels from earlier frames show
+	// through. (Not per view: a portal/mirror view is drawn before the main
+	// view and must not be wiped by it.)
 	if( r_clear->integer )
 	{
 		qglClearColor( 1, 0, 0.5, 1 );
-		qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	}
+	else
+	{
+		qglClearColor( 0, 0, 0, 1 );
+	}
+	qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
 	return (const void *)( cmd + 1 );
 }

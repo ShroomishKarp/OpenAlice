@@ -433,6 +433,19 @@ void RE_RenderScene( const refdef_t *fd )
 
 	VectorCopy( fd->vieworg, parms.pvsOrigin );
 
+	// Portal sky: the sky surfaces of the world draw no color, the sky is a
+	// separate room of the map. Draw that room first, from its camera; the
+	// main view then starts with a fresh depth buffer (every view clears it)
+	// and leaves the color of the sky surfaces alone.
+	if( fd->hasSkyPortal && !( fd->rdflags & RDF_NOWORLDMODEL ))
+	{
+		viewParms_t sky = parms;
+
+		VectorCopy( fd->skyPortalOrigin, sky.or.origin );
+		VectorCopy( fd->skyPortalOrigin, sky.pvsOrigin );
+		R_RenderView( &sky );
+	}
+
 	R_RenderView( &parms );
 
 	// the next scene rendered in this frame will tack on after this one

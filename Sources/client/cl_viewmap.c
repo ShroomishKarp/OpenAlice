@@ -20,6 +20,8 @@ extern kbutton_t in_forward, in_back, in_moveleft, in_moveright, in_up, in_down;
 #define VIEW_FLY_SPEED   400.0f // units per second
 #define VIEW_FAST_FACTOR 4.0f   // while the speed key is held
 
+#define MAX_SKY_CAMERAS 16
+
 static struct
 {
 	qboolean worldLoaded;   // the renderer can load only one world per init
@@ -27,6 +29,14 @@ static struct
 	vec3_t   origin;
 	vec3_t   angles;
 	char     name[MAX_QPATH];
+
+	// FAKK2 portal sky cameras found in the entity string (script_object
+	// entities whose targetname is sky_camera<N> / skycamera<N>). The game
+	// scripts pick the active one, we just let the user choose.
+	int      numSkyCameras;
+	int      skyCamera;     // index, -1 = no sky
+	vec3_t   skyOrigin[MAX_SKY_CAMERAS];
+	char     skyName[MAX_SKY_CAMERAS][32];
 } vmap;
 
 qboolean CL_ViewMapActive( void )
@@ -41,6 +51,76 @@ void CL_ViewMapRendererRestarted( void )
 {
 	vmap.worldLoaded = qfalse;
 	vmap.active = qfalse;
+}
+
+/*
+===============
+Find the sky portal cameras in the entity string.
+===============
+*/
+static void FindSkyCameras( const char *entities )
+{
+	const char *text = entities;
+	const char *token;
+
+	vmap.numSkyCameras = 0;
+	vmap.skyCamera = -1;
+
+	while( text && ( token = COM_Parse( (char **)&text )) && token[0] == '{' )
+	{
+		char     targetname[MAX_QPATH] = "";
+		vec3_t   org = { 0, 0, 0 };
+		qboolean hasOrigin = qfalse;
+
+		while( 1 )
+		{
+			char key[MAX_QPATH];
+
+			token = COM_Parse( (char **)&text );
+			if( !token[0] || token[0] == '}' )
+			{
+				break;
+			}
+			Q_strncpyz( key, token, sizeof( key ));
+			token = COM_Parse( (char **)&text );
+
+			if( !Q_stricmp( key, "targetname" ))
+			{
+				Q_strncpyz( targetname, token, sizeof( targetname ));
+			}
+			else if( !Q_stricmp( key, "origin" ))
+			{
+				if( sscanf( token, "%f %f %f", &org[0], &org[1], &org[2] ) == 3 )
+				{
+					hasOrigin = qtrue;
+				}
+			}
+		}
+
+		if( hasOrigin && vmap.numSkyCameras < MAX_SKY_CAMERAS
+		    && ( !Q_stricmpn( targetname, "sky_camera", 10 ) || !Q_stricmpn( targetname, "skycamera", 9 )))
+		{
+			VectorCopy( org, vmap.skyOrigin[vmap.numSkyCameras] );
+			Q_strncpyz( vmap.skyName[vmap.numSkyCameras], targetname, sizeof( vmap.skyName[0] ));
+			vmap.numSkyCameras++;
+		}
+	}
+
+	// start with the first one (entities come in map order, not numeric
+	// order, so pick the lowest-sorting name)
+	if( vmap.numSkyCameras )
+	{
+		int i, best = 0;
+
+		for( i = 1; i < vmap.numSkyCameras; i++ )
+		{
+			if( Q_stricmp( vmap.skyName[i], vmap.skyName[best] ) < 0 )
+			{
+				best = i;
+			}
+		}
+		vmap.skyCamera = best;
+	}
 }
 
 /*
@@ -142,6 +222,7 @@ static void CL_ViewMap_f( void )
 
 	// the collision model gives us the entity string
 	CM_LoadMap( vmap.name, qtrue, &checksum );
+	FindSkyCameras( CM_EntityString());
 	if( !FindStart( CM_EntityString(), origin, &yaw ))
 	{
 		Com_Printf( "no start position found in %s, starting at the origin\n", vmap.name );
@@ -172,6 +253,10 @@ static void CL_ViewMap_f( void )
 
 	Com_Printf( "viewing %s at %.0f %.0f %.0f (WASD, space/f = up/down, shift = fast, ~ = console)\n",
 		    vmap.name, vmap.origin[0], vmap.origin[1], vmap.origin[2] );
+	if( vmap.numSkyCameras )
+	{
+		Com_Printf( "%d sky camera(s), using %s (see skycam)\n", vmap.numSkyCameras, vmap.skyName[vmap.skyCamera] );
+	}
 }
 
 static void CL_ViewPos_f( void )
@@ -200,10 +285,49 @@ static void CL_ViewPos_f( void )
 	}
 }
 
+/*
+** skycam            list the sky cameras of the map
+** skycam <n>        use camera n
+** skycam off        no sky portal
+*/
+static void CL_SkyCam_f( void )
+{
+	int i;
+
+	if( Cmd_Argc() == 1 )
+	{
+		for( i = 0; i < vmap.numSkyCameras; i++ )
+		{
+			Com_Printf( "%s%d: %s at %.0f %.0f %.0f\n", i == vmap.skyCamera ? "* " : "  ", i,
+				    vmap.skyName[i], vmap.skyOrigin[i][0], vmap.skyOrigin[i][1], vmap.skyOrigin[i][2] );
+		}
+		if( !vmap.numSkyCameras )
+		{
+			Com_Printf( "no sky cameras in this map\n" );
+		}
+		return;
+	}
+
+	if( !Q_stricmp( Cmd_Argv( 1 ), "off" ))
+	{
+		vmap.skyCamera = -1;
+		return;
+	}
+
+	i = atoi( Cmd_Argv( 1 ));
+	if( i < 0 || i >= vmap.numSkyCameras )
+	{
+		Com_Printf( "no sky camera %d\n", i );
+		return;
+	}
+	vmap.skyCamera = i;
+}
+
 void CL_InitViewMap( void )
 {
 	Cmd_AddCommand( "viewmap", CL_ViewMap_f );
 	Cmd_AddCommand( "viewpos", CL_ViewPos_f );
+	Cmd_AddCommand( "skycam", CL_SkyCam_f );
 }
 
 /*
@@ -295,6 +419,12 @@ void CL_ViewMapDraw( void )
 	AnglesToAxis( vmap.angles, rd.viewaxis );
 	rd.time = cls.realtime;
 	rd.rdflags = 0;
+
+	if( vmap.skyCamera >= 0 )
+	{
+		rd.hasSkyPortal = qtrue;
+		VectorCopy( vmap.skyOrigin[vmap.skyCamera], rd.skyPortalOrigin );
+	}
 
 	re.ClearScene();
 	re.RenderScene( &rd );

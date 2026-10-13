@@ -133,6 +133,12 @@ typedef struct
 
 	// text messages for deform text shaders
 	char   text[MAX_RENDER_STRINGS][MAX_RENDER_STRING_LENGTH];
+
+	// FAKK2 portal sky: the sky is a separate room in the map, seen from a
+	// camera inside it. If set, the renderer first draws the world from
+	// skyPortalOrigin (with this view's angles), then the real view on top.
+	qboolean hasSkyPortal;
+	vec3_t   skyPortalOrigin;
 } refdef_t;
 
 

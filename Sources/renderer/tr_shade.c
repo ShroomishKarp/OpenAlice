@@ -352,7 +352,7 @@ static void DrawMultitextured( shaderCommands_t *input, int stage )
 
 	pStage = tess.xstages[stage];
 
-	GL_State( pStage->stateBits );
+	GL_StageState( pStage );
 
 	// this is an ugly hack to work around a GeForce driver
 	// bug with multitexture and clip planes
@@ -1048,7 +1048,7 @@ static void RB_IterateStagesGeneric( shaderCommands_t *input )
 			else
 				R_BindAnimatedImage( &pStage->bundle[0] );
 
-			GL_State( pStage->stateBits );
+			GL_StageState( pStage );
 
 			//
 			// draw
@@ -1102,7 +1102,7 @@ void RB_StageIteratorGeneric( void )
 	// to avoid compiling those arrays since they will change
 	// during multipass rendering
 	//
-	if( tess.numPasses > 1 || ( tess.xstages && tess.xstages[0]->multitextureEnv ))
+	if( tess.numPasses > 1 || ( tess.numPasses > 0 && tess.xstages && tess.xstages[0] && tess.xstages[0]->multitextureEnv ))
 	{
 		setArraysOnce = qfalse;
 		qglDisableClientState( GL_COLOR_ARRAY );
@@ -1221,7 +1221,7 @@ void RB_StageIteratorVertexLitTexture( void )
 	// call special shade routine
 	//
 	R_BindAnimatedImage( &tess.xstages[0]->bundle[0] );
-	GL_State( tess.xstages[0]->stateBits );
+	GL_StageState( tess.xstages[0] );
 	R_DrawElements( input->numIndexes, input->indexes );
 
 	//

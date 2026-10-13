@@ -363,6 +363,7 @@ typedef struct
 	alphaGen_t alphaGen;
 
 	unsigned   stateBits;                                                   // GLS_xxxx mask
+	float      alphaTestRef;                                                // "alphatest greaterequal <ref>", 0 = the fixed GLS_ATEST_GE_80 threshold
 
 	acff_t     adjustColorsForFog;
 	qboolean   unknown;
@@ -927,6 +928,8 @@ typedef struct
 	int           cntTexEnvExt;
 	int           cntnvblendmode;
 	unsigned long glStateBits;
+	float         alphaRef;        // the reference GL_GEQUAL currently uses, -1 if unknown
+	float         stageAlphaRef;   // wanted reference for GLS_ATEST_GE_80, 0 = default (0.5)
 } glstate_t;
 
 
@@ -1229,6 +1232,7 @@ void GL_SelectTexture( int unit );
 void GL_TextureMode( const char *string );
 void GL_CheckErrors( void );
 void GL_State( unsigned long stateVector );
+void GL_StageState( const shaderStage_t *stage );
 void GL_TexEnv( int env );
 void GL_Cull( int cullType );
 
