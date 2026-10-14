@@ -166,6 +166,30 @@ RB_CalcDeformNormals
 Wiggle the normals for wavy environment mapping
 =========================
 */
+/*
+** deformVertexes wavenormal: the normal of every vertex is pushed along
+** (x, y, z) by a wave that is phase-shifted by the vertex position.
+*/
+void RB_CalcDeformWaveNormals( deformStage_t *ds )
+{
+	int   i;
+	float *xyz = (float *) tess.xyz;
+	float *normal = (float *) tess.normal;
+
+	for( i = 0; i < tess.numVertexes; i++, xyz += 4, normal += 4 )
+	{
+		waveForm_t wave = ds->deformationWave;
+		float      w;
+
+		wave.phase += ( xyz[0] + xyz[1] + xyz[2] ) * ds->deformationSpread;
+		w = EvalWaveForm( &wave );
+		normal[0] += ds->moveVector[0] * w;
+		normal[1] += ds->moveVector[1] * w;
+		normal[2] += ds->moveVector[2] * w;
+		VectorNormalizeFast( normal );
+	}
+}
+
 void RB_CalcDeformNormals( deformStage_t *ds )
 {
 	int   i;
@@ -589,6 +613,9 @@ void RB_DeformTessGeometry( void )
 			break;
 		case DEFORM_NORMALS:
 			RB_CalcDeformNormals( ds );
+			break;
+		case DEFORM_WAVE_NORMALS:
+			RB_CalcDeformWaveNormals( ds );
 			break;
 		case DEFORM_WAVE:
 			RB_CalcDeformVertexes( ds );

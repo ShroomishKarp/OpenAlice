@@ -77,12 +77,11 @@ static void SkipBlock( char **text )
 static qboolean R_LoadTAN( model_t *mod, const byte *buf, int len, const char *name, float scale,
 			   const char *path, const tikiSurface_t *tikSurf, int numTikSurf, const char *defaultShader )
 {
-	int       numSurfaces, i, s;
+	int       numSurfaces, i, s, numFrames, f;
+	float     totalTime;
 	const byte *surf;
-	byte      *mem;
 	srfTriangles_t **surfaces;
 	shader_t **shaders;
-	float     frameScale[3], frameOffset[3];
 	int       ofsFrames, ofsSurfaces;
 
 	if( len < 176 || ReadInt( buf ) != TAN_IDENT || ReadInt( buf + 4 ) != TAN_VERSION )
@@ -94,21 +93,16 @@ static qboolean R_LoadTAN( model_t *mod, const byte *buf, int len, const char *n
 	numSurfaces = ReadInt( buf + TAN_OFS_NUMSURFACES );
 	ofsFrames = ReadInt( buf + TAN_OFS_FRAMES );
 	ofsSurfaces = ReadInt( buf + TAN_OFS_SURFACES );
-	if( ReadInt( buf + TAN_OFS_NUMFRAMES ) < 1 || numSurfaces < 1 || numSurfaces > TIKI_MAX_SURFACES
-	    || ofsFrames + TAN_FRAME_SIZE > len || ofsSurfaces >= len )
+	numFrames = ReadInt( buf + TAN_OFS_NUMFRAMES );
+	totalTime = ReadFloat( buf + 84 );
+	if( numFrames < 1 || numFrames > 4096 || numSurfaces < 1 || numSurfaces > TIKI_MAX_SURFACES
+	    || ofsFrames + numFrames * TAN_FRAME_SIZE > len || ofsSurfaces >= len )
 	{
 		ri.Printf( PRINT_WARNING, "R_LoadTAN: %s has a bad header\n", name );
 		return qfalse;
 	}
 
-	// frame 0: mins[3] maxs[3] scale[3] offset[3] delta[3] radius time
-	for( i = 0; i < 3; i++ )
-	{
-		frameScale[i] = ReadFloat( buf + ofsFrames + 24 + i * 4 );
-		frameOffset[i] = ReadFloat( buf + ofsFrames + 36 + i * 4 );
-	}
-
-	surfaces = ri.Hunk_Alloc( numSurfaces * sizeof( *surfaces ), h_low );
+	surfaces = ri.Hunk_Alloc( numSurfaces * numFrames * sizeof( *surfaces ), h_low );
 	shaders = ri.Hunk_Alloc( numSurfaces * sizeof( *shaders ), h_low );
 
 	surf = buf + ofsSurfaces;
@@ -168,14 +162,7 @@ static qboolean R_LoadTAN( model_t *mod, const byte *buf, int len, const char *n
 			shaders[s] = tr.defaultShader;
 		}
 
-		tri = ri.Hunk_Alloc( sizeof( *tri ), h_low );
-		tri->surfaceType = SF_TRIANGLES;
-		tri->numVerts = numVerts;
-		tri->numIndexes = numTris * 3;
-		tri->verts = ri.Hunk_Alloc( numVerts * sizeof( drawVert_t ), h_low );
-		tri->indexes = ri.Hunk_Alloc( numTris * 3 * sizeof( int ), h_low );
-
-		idx = tri->indexes;
+		idx = ri.Hunk_Alloc( numTris * 3 * sizeof( int ), h_low );
 		for( i = 0; i < numTris * 3; i++ )
 		{
 			idx[i] = ReadInt( surf + ofsTris + i * 4 );
@@ -187,42 +174,60 @@ static qboolean R_LoadTAN( model_t *mod, const byte *buf, int len, const char *n
 		}
 
 		st = surf + ofsST;
-		xyz = surf + ofsXyz;
-		ClearBounds( tri->bounds[0], tri->bounds[1] );
-		for( i = 0, dv = tri->verts; i < numVerts; i++, dv++ )
+		for( f = 0; f < numFrames; f++ )
 		{
-			const unsigned short *p = (const unsigned short *)( xyz + i * 8 );
-			unsigned short       n = LittleShort( p[3] );
-			float                lat = (( n >> 8 ) & 0xff ) * ( 2.0f * M_PI / 256.0f );
-			float                lng = ( n & 0xff ) * ( 2.0f * M_PI / 256.0f );
-			int                  k;
+			// frame: mins[3] maxs[3] scale[3] offset[3] delta[3] radius time
+			float frameScale[3], frameOffset[3];
+			int   k;
 
 			for( k = 0; k < 3; k++ )
 			{
-				dv->xyz[k] = ( LittleShort( p[k] ) & 0xffff ) * frameScale[k] + frameOffset[k];
-				dv->xyz[k] *= scale;
+				frameScale[k] = ReadFloat( buf + ofsFrames + f * TAN_FRAME_SIZE + 24 + k * 4 );
+				frameOffset[k] = ReadFloat( buf + ofsFrames + f * TAN_FRAME_SIZE + 36 + k * 4 );
 			}
-			dv->normal[0] = cos( lat ) * sin( lng );
-			dv->normal[1] = sin( lat ) * sin( lng );
-			dv->normal[2] = cos( lng );
-			dv->st[0] = ReadFloat( st + i * 8 );
-			dv->st[1] = ReadFloat( st + i * 8 + 4 );
-			dv->lightmap[0] = dv->lightmap[1] = 0;
-			dv->color[0] = dv->color[1] = dv->color[2] = dv->color[3] = 255;
-			AddPointToBounds( dv->xyz, tri->bounds[0], tri->bounds[1] );
-		}
-		VectorAdd( tri->bounds[0], tri->bounds[1], tri->localOrigin );
-		VectorScale( tri->localOrigin, 0.5f, tri->localOrigin );
-		tri->radius = Distance( tri->bounds[0], tri->localOrigin );
 
-		surfaces[s] = tri;
+			tri = ri.Hunk_Alloc( sizeof( *tri ), h_low );
+			tri->surfaceType = SF_TRIANGLES;
+			tri->numVerts = numVerts;
+			tri->numIndexes = numTris * 3;
+			tri->indexes = idx; // shared by all frames
+			tri->verts = ri.Hunk_Alloc( numVerts * sizeof( drawVert_t ), h_low );
+
+			xyz = surf + ofsXyz + f * numVerts * 8;
+			ClearBounds( tri->bounds[0], tri->bounds[1] );
+			for( i = 0, dv = tri->verts; i < numVerts; i++, dv++ )
+			{
+				const unsigned short *p = (const unsigned short *)( xyz + i * 8 );
+				unsigned short       n = LittleShort( p[3] );
+				float                lat = (( n >> 8 ) & 0xff ) * ( 2.0f * M_PI / 256.0f );
+				float                lng = ( n & 0xff ) * ( 2.0f * M_PI / 256.0f );
+
+				for( k = 0; k < 3; k++ )
+				{
+					dv->xyz[k] = (( LittleShort( p[k] ) & 0xffff ) * frameScale[k] + frameOffset[k] ) * scale;
+				}
+				dv->normal[0] = cos( lat ) * sin( lng );
+				dv->normal[1] = sin( lat ) * sin( lng );
+				dv->normal[2] = cos( lng );
+				dv->st[0] = ReadFloat( st + i * 8 );
+				dv->st[1] = ReadFloat( st + i * 8 + 4 );
+				dv->lightmap[0] = dv->lightmap[1] = 0;
+				dv->color[0] = dv->color[1] = dv->color[2] = dv->color[3] = 255;
+				AddPointToBounds( dv->xyz, tri->bounds[0], tri->bounds[1] );
+			}
+			VectorAdd( tri->bounds[0], tri->bounds[1], tri->localOrigin );
+			VectorScale( tri->localOrigin, 0.5f, tri->localOrigin );
+			tri->radius = Distance( tri->bounds[0], tri->localOrigin );
+
+			surfaces[s * numFrames + f] = tri;
+		}
 		surf += ofsEnd;
 	}
 
-	mem = (byte *)mod;
-	( void )mem;
 	mod->type = MOD_TAN;
 	mod->numTanSurfaces = numSurfaces;
+	mod->numTanFrames = numFrames;
+	mod->tanFrameTime = totalTime > 0 ? totalTime / numFrames : 1.0f / 30.0f;
 	mod->tanSurfaces = surfaces;
 	mod->tanShaders = shaders;
 	mod->dataSize += len;
@@ -356,6 +361,12 @@ qboolean R_LoadTIKI( model_t *mod, const char *name )
 		}
 	}
 	ri.FS_FreeFile( buf );
+
+	// "path models/halo/" would make "models/halo//x.tan"
+	while( path[0] && path[strlen( path ) - 1] == '/' )
+	{
+		path[strlen( path ) - 1] = 0;
+	}
 
 	if( skeletal || !tanFile[0] || !path[0] )
 	{

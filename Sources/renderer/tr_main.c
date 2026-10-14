@@ -1439,12 +1439,23 @@ void R_AddEntitySurfaces( void )
 					break;
 				case MOD_TAN:
 				{
-					int i;
+					int       i, frame = 0;
+					model_t   *m = tr.currentModel;
+
+					// animated models loop through their frames
+					if( m->numTanFrames > 1 )
+					{
+						frame = ( int )(( tr.refdef.time + ent->e.shaderTime * 1000 ) * 0.001f / m->tanFrameTime ) % m->numTanFrames;
+						if( frame < 0 )
+						{
+							frame = 0;
+						}
+					}
 
 					R_SetupEntityLighting( &tr.refdef, ent );
-					for( i = 0; i < tr.currentModel->numTanSurfaces; i++ )
+					for( i = 0; i < m->numTanSurfaces; i++ )
 					{
-						R_AddDrawSurf(( surfaceType_t * )tr.currentModel->tanSurfaces[i], tr.currentModel->tanShaders[i], 0, 0 );
+						R_AddDrawSurf(( surfaceType_t * )m->tanSurfaces[i * m->numTanFrames + frame], m->tanShaders[i], 0, 0 );
 					}
 					break;
 				}

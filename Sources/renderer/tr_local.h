@@ -169,6 +169,7 @@ typedef enum
 	DEFORM_NONE,
 	DEFORM_WAVE,
 	DEFORM_NORMALS,
+	DEFORM_WAVE_NORMALS, // FAKK2: deformVertexes wavenormal
 	DEFORM_BULGE,
 	DEFORM_MOVE,
 	DEFORM_PROJECTION_SHADOW,
@@ -849,8 +850,10 @@ typedef struct model_s
 	md4Header_t *md4;               // only if type == MOD_MD4
 
 	int             numTanSurfaces; // only if type == MOD_TAN
-	srfTriangles_t  **tanSurfaces;
-	shader_t        **tanShaders;
+	int             numTanFrames;
+	float           tanFrameTime;   // seconds per frame
+	srfTriangles_t  **tanSurfaces;  // [surface * numTanFrames + frame]
+	shader_t        **tanShaders;   // [surface]
 
 	int         numLods;
 } model_t;

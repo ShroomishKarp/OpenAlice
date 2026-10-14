@@ -1171,12 +1171,19 @@ static void ParseDeform( char **text )
 	}
 
 	// FAKK2: deformVertexes wavenormal <spread> <x> <y> <z> <func> <base> <amp> <phase> <freq>
-	// It animates the vertex normals (for tcGen environment on water), not the
-	// positions. Not implemented: accept the line and apply no deformation.
+	// Animates the vertex normals (for tcGen environment on water), not the
+	// positions: a wave, phase-shifted by the vertex position, scales the
+	// vector (x, y, z) that is added to the normal.
 	if( !Q_stricmp( token, "wavenormal" ))
 	{
-		SkipRestOfLine( text );
-		shader.numDeforms--;
+		float spread;
+
+		token = COM_ParseExt( text, qfalse );
+		spread = atof( token );
+		ds->deformationSpread = spread ? 1.0f / spread : 100.0f;
+		ParseVector( text, 3, ds->moveVector );
+		ParseWaveForm( text, &ds->deformationWave );
+		ds->deformation = DEFORM_WAVE_NORMALS;
 		return;
 	}
 
