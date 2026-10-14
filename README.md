@@ -2,6 +2,6 @@
 
 A project in the very early stages of development
 
-<img width="651" height="517" alt="изображение" src="https://github.com/user-attachments/assets/70c9cbd9-68f5-44fa-ac06-0c45979921c7" />
+<img width="648" height="514" alt="изображение" src="https://github.com/user-attachments/assets/e66da020-7834-4708-9a56-be8bff2df6ee" />
 
 Forked from [FWGS/realice](https://github.com/FWGS/realice.git), thanks [FWGS](https://github.com/FWGS.git) and [a1batross](https://github.com/a1batross).
