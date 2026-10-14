@@ -21,6 +21,14 @@ extern kbutton_t in_forward, in_back, in_moveleft, in_moveright, in_up, in_down;
 #define VIEW_FAST_FACTOR 4.0f   // while the speed key is held
 
 #define MAX_SKY_CAMERAS 16
+#define MAX_VIEW_MODELS 2048
+
+typedef struct
+{
+	qhandle_t hModel;
+	vec3_t    origin;
+	vec3_t    angles;
+} viewModel_t;
 
 static struct
 {
@@ -37,6 +45,10 @@ static struct
 	int      skyCamera;     // index, -1 = no sky
 	vec3_t   skyOrigin[MAX_SKY_CAMERAS];
 	char     skyName[MAX_SKY_CAMERAS][32];
+
+	// entities with a .tik model (props, pickups, ...)
+	int         numModels;
+	viewModel_t models[MAX_VIEW_MODELS];
 } vmap;
 
 qboolean CL_ViewMapActive( void )
@@ -121,6 +133,85 @@ static void FindSkyCameras( const char *entities )
 		}
 		vmap.skyCamera = best;
 	}
+}
+
+/*
+===============
+Register the .tik models of the map's entities.
+===============
+*/
+static void LoadEntityModels( const char *entities )
+{
+	const char *text = entities;
+	const char *token;
+	int        tried = 0, failed = 0;
+
+	vmap.numModels = 0;
+
+	while( text && ( token = COM_Parse( (char **)&text )) && token[0] == '{' )
+	{
+		char     model[MAX_QPATH] = "";
+		vec3_t   org = { 0, 0, 0 }, ang = { 0, 0, 0 };
+
+		while( 1 )
+		{
+			char key[MAX_QPATH];
+
+			token = COM_Parse( (char **)&text );
+			if( !token[0] || token[0] == '}' )
+			{
+				break;
+			}
+			Q_strncpyz( key, token, sizeof( key ));
+			token = COM_Parse( (char **)&text );
+
+			if( !Q_stricmp( key, "model" ))
+			{
+				Q_strncpyz( model, token, sizeof( model ));
+			}
+			else if( !Q_stricmp( key, "origin" ))
+			{
+				sscanf( token, "%f %f %f", &org[0], &org[1], &org[2] );
+			}
+			else if( !Q_stricmp( key, "angle" ))
+			{
+				ang[YAW] = atof( token );
+			}
+			else if( !Q_stricmp( key, "angles" ))
+			{
+				sscanf( token, "%f %f %f", &ang[PITCH], &ang[YAW], &ang[ROLL] );
+			}
+		}
+
+		if( strlen( model ) > 4 && !Q_stricmp( model + strlen( model ) - 4, ".tik" ) && vmap.numModels < MAX_VIEW_MODELS )
+		{
+			qhandle_t h;
+
+			// entities name models without the directory
+			if( !strchr( model, '/' ))
+			{
+				char full[MAX_QPATH];
+
+				Com_sprintf( full, sizeof( full ), "models/%s", model );
+				Q_strncpyz( model, full, sizeof( model ));
+			}
+			h = re.RegisterModel( model );
+
+			tried++;
+			if( !h )
+			{
+				failed++;
+				Com_DPrintf( "viewmap: no model for %s\n", model );
+				continue;
+			}
+			vmap.models[vmap.numModels].hModel = h;
+			VectorCopy( org, vmap.models[vmap.numModels].origin );
+			VectorCopy( ang, vmap.models[vmap.numModels].angles );
+			vmap.numModels++;
+		}
+	}
+
+	Com_Printf( "%d of %d .tik models shown (the rest are skeletal, not supported yet)\n", vmap.numModels, tried );
 }
 
 /*
@@ -229,6 +320,7 @@ static void CL_ViewMap_f( void )
 	}
 
 	re.LoadWorld( vmap.name );
+	LoadEntityModels( CM_EntityString());
 	re.EndRegistration();
 	vmap.worldLoaded = qtrue;
 
@@ -399,6 +491,7 @@ void CL_ViewMapDraw( void )
 {
 	refdef_t rd;
 	float    x;
+	int      i;
 
 	if( !CL_ViewMapActive() )
 	{
@@ -427,5 +520,18 @@ void CL_ViewMapDraw( void )
 	}
 
 	re.ClearScene();
+	for( i = 0; i < vmap.numModels; i++ )
+	{
+		refEntity_t ent;
+
+		Com_Memset( &ent, 0, sizeof( ent ));
+		ent.reType = RT_MODEL;
+		ent.hModel = vmap.models[i].hModel;
+		VectorCopy( vmap.models[i].origin, ent.origin );
+		VectorCopy( vmap.models[i].origin, ent.lightingOrigin );
+		AnglesToAxis( vmap.models[i].angles, ent.axis );
+		ent.renderfx = RF_LIGHTING_ORIGIN;
+		re.AddRefEntityToScene( &ent );
+	}
 	re.RenderScene( &rd );
 }

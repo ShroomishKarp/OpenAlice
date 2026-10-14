@@ -833,7 +833,8 @@ typedef enum
 	MOD_BAD,
 	MOD_BRUSH,
 	MOD_MESH,
-	MOD_MD4
+	MOD_MD4,
+	MOD_TAN // FAKK2 static model (.tik/.tan)
 } modtype_t;
 
 typedef struct model_s
@@ -846,6 +847,10 @@ typedef struct model_s
 	bmodel_t    *bmodel;            // only if type == MOD_BRUSH
 	md3Header_t *md3[MD3_MAX_LODS]; // only if type == MOD_MESH
 	md4Header_t *md4;               // only if type == MOD_MD4
+
+	int             numTanSurfaces; // only if type == MOD_TAN
+	srfTriangles_t  **tanSurfaces;
+	shader_t        **tanShaders;
 
 	int         numLods;
 } model_t;
@@ -1288,6 +1293,7 @@ void RE_Shutdown( qboolean destroyWindow );
 qboolean R_GetEntityToken( char *buffer, int size );
 
 model_t *R_AllocModel( void );
+qboolean R_LoadTIKI( model_t *mod, const char *name );
 
 void R_Init( void );
 image_t *R_FindImageFile( const char *name, qboolean mipmap, qboolean allowPicmip, qboolean force32bit, int glWrapClampMode );

@@ -142,6 +142,18 @@ qhandle_t RE_RegisterModel( const char *name )
 
 	mod->numLods = 0;
 
+	// FAKK2 .tik models
+	if( strlen( name ) > 4 && !Q_stricmp( name + strlen( name ) - 4, ".tik" ))
+	{
+		if( R_LoadTIKI( mod, name ))
+		{
+			mod->numLods = 1;
+			return mod->index;
+		}
+		mod->type = MOD_BAD;
+		return 0;
+	}
+
 	//
 	// load the files
 	//

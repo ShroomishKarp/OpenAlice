@@ -1437,6 +1437,17 @@ void R_AddEntitySurfaces( void )
 				case MOD_BRUSH:
 					R_AddBrushModelSurfaces( ent );
 					break;
+				case MOD_TAN:
+				{
+					int i;
+
+					R_SetupEntityLighting( &tr.refdef, ent );
+					for( i = 0; i < tr.currentModel->numTanSurfaces; i++ )
+					{
+						R_AddDrawSurf(( surfaceType_t * )tr.currentModel->tanSurfaces[i], tr.currentModel->tanShaders[i], 0, 0 );
+					}
+					break;
+				}
 				case MOD_BAD: // null model axis
 					if(( ent->e.renderfx & RF_THIRD_PERSON ) && !tr.viewParms.isPortal )
 					{
