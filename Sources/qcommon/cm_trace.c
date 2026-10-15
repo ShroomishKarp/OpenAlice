@@ -140,15 +140,15 @@ SquareRootFloat
 */
 float SquareRootFloat( float number )
 {
-	long  i;
+	int32_t i; // 32 bit: "long" is 64 bit here and would read past the float
 	float x, y;
 	const float f = 1.5F;
 
 	x = number * 0.5F;
 	y = number;
-	i = *(long *) &y;
+	memcpy( &i, &y, sizeof( i ));
 	i = 0x5f3759df - ( i >> 1 );
-	y = *(float *) &i;
+	memcpy( &y, &i, sizeof( y ));
 	y = y * ( f - ( x * y * y ));
 	y = y * ( f - ( x * y * y ));
 	return number * y;

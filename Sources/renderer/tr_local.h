@@ -835,7 +835,8 @@ typedef enum
 	MOD_BRUSH,
 	MOD_MESH,
 	MOD_MD4,
-	MOD_TAN // FAKK2 static model (.tik/.tan)
+	MOD_TAN, // FAKK2 static model (.tik/.tan)
+	MOD_SKEL // FAKK2 skeletal model (.tik/.skb/.ska)
 } modtype_t;
 
 typedef struct model_s
@@ -854,6 +855,8 @@ typedef struct model_s
 	float           tanFrameTime;   // seconds per frame
 	srfTriangles_t  **tanSurfaces;  // [surface * numTanFrames + frame]
 	shader_t        **tanShaders;   // [surface]
+
+	struct skelModel_s *skel;       // only if type == MOD_SKEL
 
 	int         numLods;
 } model_t;
@@ -1297,6 +1300,7 @@ qboolean R_GetEntityToken( char *buffer, int size );
 
 model_t *R_AllocModel( void );
 qboolean R_LoadTIKI( model_t *mod, const char *name );
+void R_AddSkelSurfaces( trRefEntity_t *ent );
 
 void R_Init( void );
 image_t *R_FindImageFile( const char *name, qboolean mipmap, qboolean allowPicmip, qboolean force32bit, int glWrapClampMode );

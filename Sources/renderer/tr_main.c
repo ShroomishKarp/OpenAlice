@@ -1437,6 +1437,9 @@ void R_AddEntitySurfaces( void )
 				case MOD_BRUSH:
 					R_AddBrushModelSurfaces( ent );
 					break;
+				case MOD_SKEL:
+					R_AddSkelSurfaces( ent );
+					break;
 				case MOD_TAN:
 				{
 					int       i, frame = 0;
