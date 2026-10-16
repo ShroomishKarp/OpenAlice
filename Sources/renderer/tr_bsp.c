@@ -1843,6 +1843,44 @@ R_LoadLightGrid
 
 ================
 */
+/*
+===============
+R_LoadSphereLights
+
+Point lights of the map: origin, color, intensity, leaf, ... (60 bytes each).
+Used to light models, see R_SetupSphereLighting().
+===============
+*/
+static void R_LoadSphereLights( lump_t *l )
+{
+	const byte *in = ( const byte * )( fileBase + l->fileofs );
+	int        i, count;
+
+	s_worldData.numSphereLights = 0;
+	s_worldData.sphereLights = NULL;
+	if( l->filelen % 60 || !l->filelen )
+	{
+		return;
+	}
+	count = l->filelen / 60;
+	s_worldData.sphereLights = ri.Hunk_Alloc( count * sizeof( sphereLight_t ), h_low );
+	for( i = 0; i < count; i++, in += 60 )
+	{
+		sphereLight_t *sl = &s_worldData.sphereLights[i];
+		int           k;
+
+		for( k = 0; k < 3; k++ )
+		{
+			sl->origin[k] = LittleFloat( *( const float * )( in + k * 4 ));
+			sl->color[k] = LittleFloat( *( const float * )( in + 12 + k * 4 ));
+		}
+		sl->intensity = LittleFloat( *( const float * )( in + 24 ));
+		sl->leaf = LittleLong( *( const int * )( in + 28 ));
+		sl->maxLight = LittleFloat( *( const float * )( in + 56 ));
+	}
+	s_worldData.numSphereLights = count;
+}
+
 void R_LoadLightGrid( lump_t *l )
 {
 	int     i;
@@ -1852,6 +1890,12 @@ void R_LoadLightGrid( lump_t *l )
 	float   *wMins, *wMaxs;
 
 	w = &s_worldData;
+
+	// Nothing set the cell size, so the grid never matched ("light grid
+	// mismatch"). Alice's maps all fit 192 x 192 x 320 (checked on all 36).
+	w->lightGridSize[0] = 192.0f;
+	w->lightGridSize[1] = 192.0f;
+	w->lightGridSize[2] = 320.0f;
 
 	w->lightGridInverseSize[0] = 1.0f / w->lightGridSize[0];
 	w->lightGridInverseSize[1] = 1.0f / w->lightGridSize[1];
@@ -1985,6 +2029,7 @@ void RE_LoadWorldMap( const char *name )
 	R_LoadSubmodels( &header->lumps[LUMP_MODELS] );
 	R_LoadVisibility( &header->lumps[LUMP_VISIBILITY] );
 	R_LoadLightGrid( &header->lumps[LUMP_LIGHTGRID] );
+	R_LoadSphereLights( &header->lumps[17] );
 
 	s_worldData.dataSize = (byte *)ri.Hunk_Alloc( 0, h_low ) - startMarker;
 

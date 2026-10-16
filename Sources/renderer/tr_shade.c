@@ -728,6 +728,10 @@ static void ComputeColors( shaderStage_t *pStage )
 	case CGEN_EXACT_VERTEX:
 		Com_Memcpy( tess.svars.colors, tess.vertexColors, tess.numVertexes * sizeof( tess.vertexColors[0] ));
 		break;
+	case CGEN_GLOBAL_COLOR:
+		// "rgbGen global": the game sets a global color; until something does, white
+		Com_Memset( tess.svars.colors, 0xff, tess.numVertexes * 4 );
+		break;
 	case CGEN_CONSTANT:
 		for( i = 0; i < tess.numVertexes; i++ )
 		{
@@ -835,6 +839,38 @@ static void ComputeColors( shaderStage_t *pStage )
 		for( i = 0; i < tess.numVertexes; i++ )
 		{
 			tess.svars.colors[i][3] = 255 - tess.vertexColors[i][3];
+		}
+		break;
+	case AGEN_GLOBAL_ALPHA:
+		// "alphaGen global": likewise driven by the game, opaque until then
+		for( i = 0; i < tess.numVertexes; i++ )
+		{
+			tess.svars.colors[i][3] = 0xff;
+		}
+		break;
+	case AGEN_DOT:
+	case AGEN_ONE_MINUS_DOT:
+		// alpha from the angle between the surface normal and the view: 1 when
+		// looking straight at the surface, 0 when it is seen edge on
+		for( i = 0; i < tess.numVertexes; i++ )
+		{
+			vec3_t v;
+			float  len, d, a;
+
+			VectorSubtract( backEnd.or.viewOrigin, tess.xyz[i], v );
+			len = sqrt( DotProduct( v, v ));
+			d = len > 0.0001f ? fabs( DotProduct( v, tess.normal[i] )) / len : 1.0f;
+			if( d > 1.0f )
+			{
+				d = 1.0f;
+			}
+			if( pStage->alphaGen == AGEN_ONE_MINUS_DOT )
+			{
+				d = 1.0f - d;
+			}
+			a = pStage->alphaMin + ( pStage->alphaMax - pStage->alphaMin ) * d;
+			a = a < 0.0f ? 0.0f : ( a > 1.0f ? 1.0f : a );
+			tess.svars.colors[i][3] = ( byte )( a * 255.0f );
 		}
 		break;
 	case AGEN_PORTAL:

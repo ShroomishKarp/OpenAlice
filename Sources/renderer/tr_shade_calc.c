@@ -1192,6 +1192,33 @@ void RB_CalcDiffuseColor( unsigned char *colors )
 	int    numVertexes;
 
 	ent = backEnd.currentEntity;
+
+	// models lit by the map's point lights: blend the six colors by the normal
+	if( ent->sphereLit )
+	{
+		const float *nrm = tess.normal[0];
+
+		for( i = 0; i < tess.numVertexes; i++, nrm += 4 )
+		{
+			float c[3] = { 0, 0, 0 };
+
+			for( j = 0; j < 3; j++ )
+			{
+				const float *face = ent->sphereCube[j * 2 + ( nrm[j] < 0 ? 1 : 0 )];
+				float       w = fabs( nrm[j] );
+
+				c[0] += w * face[0];
+				c[1] += w * face[1];
+				c[2] += w * face[2];
+			}
+			colors[i * 4 + 0] = c[0] > 255.0f ? 255 : ( byte )c[0];
+			colors[i * 4 + 1] = c[1] > 255.0f ? 255 : ( byte )c[1];
+			colors[i * 4 + 2] = c[2] > 255.0f ? 255 : ( byte )c[2];
+			colors[i * 4 + 3] = 255;
+		}
+		return;
+	}
+
 	ambientLightInt = ent->ambientLightInt;
 
 	VectorCopy( ent->ambientLight, ambientLight );

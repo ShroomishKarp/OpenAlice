@@ -318,6 +318,101 @@ Calculates all the lighting values that will be used
 by the Calc_* functions
 =================
 */
+/*
+===============
+R_SetupSphereLighting
+
+Alice lights models with the point lights of the map instead of the light
+grid. Every light that can see the model adds to six colors, one per axis
+direction (the "sphere": +x -x +y -y +z -z in the model's space). That follows
+the original: the light's strength is intensity * 30000 / distance squared
+(clamped by the light's maximum), and a direction gets the cosine between its
+axis and the way to the light. Not done: spot lights, traced lights, the sun.
+===============
+*/
+static const float sphereDirs[6][3] = {
+	{  1,  0,  0 }, { -1,  0,  0 }, { 0,  1,  0 }, { 0, -1,  0 }, { 0,  0,  1 }, { 0,  0, -1 }
+};
+
+#define SPHERE_BASE_LIGHT 12.0f // keeps a model that no light reaches from going black
+
+static void R_SetupSphereLighting( trRefEntity_t *ent, const vec3_t center )
+{
+	int i, k;
+
+	ent->sphereLit = qtrue;
+	for( i = 0; i < 6; i++ )
+	{
+		ent->sphereCube[i][0] = ent->sphereCube[i][1] = ent->sphereCube[i][2] = SPHERE_BASE_LIGHT;
+	}
+
+	for( k = 0; k < tr.world->numSphereLights; k++ )
+	{
+		const sphereLight_t *sl = &tr.world->sphereLights[k];
+		vec3_t d, local;
+		float  dist2, strength;
+
+		if( sl->intensity <= 0 )
+		{
+			continue;
+		}
+		VectorSubtract( sl->origin, center, d );
+		dist2 = DotProduct( d, d );
+		if( dist2 < 1.0f )
+		{
+			dist2 = 1.0f;
+		}
+		strength = sl->intensity * 30000.0f / dist2;
+		if( strength < 1.0f )
+		{
+			continue;
+		}
+		if( sl->maxLight != 0 && strength > sl->maxLight )
+		{
+			strength = sl->maxLight;
+		}
+		if( !R_inPVS( center, sl->origin ))
+		{
+			continue;
+		}
+
+		// the way to the light in the model's space
+		local[0] = DotProduct( d, ent->e.axis[0] );
+		local[1] = DotProduct( d, ent->e.axis[1] );
+		local[2] = DotProduct( d, ent->e.axis[2] );
+		VectorNormalize( local );
+
+		for( i = 0; i < 6; i++ )
+		{
+			float cosine = DotProduct( local, sphereDirs[i] );
+
+			if( cosine > 0 )
+			{
+				ent->sphereCube[i][0] += strength * cosine * sl->color[0];
+				ent->sphereCube[i][1] += strength * cosine * sl->color[1];
+				ent->sphereCube[i][2] += strength * cosine * sl->color[2];
+			}
+		}
+	}
+
+	// too bright: scale each color down so that its strongest channel is 255
+	for( i = 0; i < 6; i++ )
+	{
+		float m = ent->sphereCube[i][0];
+
+		if( ent->sphereCube[i][1] > m ) m = ent->sphereCube[i][1];
+		if( ent->sphereCube[i][2] > m ) m = ent->sphereCube[i][2];
+		if( m > 255.0f )
+		{
+			float s = 255.0f / m;
+
+			ent->sphereCube[i][0] *= s;
+			ent->sphereCube[i][1] *= s;
+			ent->sphereCube[i][2] *= s;
+		}
+	}
+}
+
 void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent )
 {
 	int      i;
@@ -363,6 +458,17 @@ void R_SetupEntityLighting( const trRefdef_t *refdef, trRefEntity_t *ent )
 		ent->directedLight[0] = ent->directedLight[1]
 						= ent->directedLight[2] = tr.identityLight * 150;
 		VectorCopy( tr.sunDirection, ent->lightDir );
+	}
+
+	// models of Alice (.tik): lit by the point lights of the map
+	if( !( refdef->rdflags & RDF_NOWORLDMODEL ) && tr.world && tr.world->numSphereLights && ent->e.reType == RT_MODEL )
+	{
+		model_t *m = R_GetModelByHandle( ent->e.hModel );
+
+		if( m && ( m->type == MOD_TAN || m->type == MOD_SKEL ))
+		{
+			R_SetupSphereLighting( ent, lightOrigin );
+		}
 	}
 
 	// bonus items and view weapons have a fixed minimum add

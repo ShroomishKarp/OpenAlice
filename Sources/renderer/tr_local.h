@@ -66,6 +66,16 @@ typedef struct dlight_s
 } dlight_t;
 
 
+// a point light of the map (BSP lump 17, 60 bytes per record)
+typedef struct
+{
+	vec3_t origin;
+	vec3_t color;       // 0..1
+	float  intensity;   // contribution at distance d: intensity * 30000 / (d * d)
+	int    leaf;
+	float  maxLight;    // clamp for that contribution, 0 = none
+} sphereLight_t;
+
 // a trRefEntity_t has all the information passed in by
 // the client game, as well as some locally derived info
 typedef struct
@@ -80,6 +90,11 @@ typedef struct
 	vec3_t   ambientLight;          // color normalized to 0-255
 	int      ambientLightInt;       // 32 bit rgba packed
 	vec3_t   directedLight;
+
+	// Alice's "sphere" lighting of models: six colors, one per axis direction
+	// (+x -x +y -y +z -z) in the model's space; a vertex blends them by its normal
+	qboolean sphereLit;
+	float    sphereCube[6][3];
 } trRefEntity_t;
 
 
@@ -825,6 +840,9 @@ typedef struct
 
 	char       *entityString;
 	char       *entityParsePoint;
+
+	int            numSphereLights;
+	sphereLight_t  *sphereLights;
 } world_t;
 
 // ======================================================================
