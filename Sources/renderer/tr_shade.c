@@ -1007,6 +1007,16 @@ static void ComputeTexCoords( shaderStage_t *pStage )
 							(float *) tess.svars.texcoords[b] );
 				break;
 
+			case TMOD_OFFSET:
+				RB_CalcOffsetTexCoords( pStage->bundle[b].texMods[tm].scroll,
+							(float *) tess.svars.texcoords[b] );
+				break;
+
+			case TMOD_MACRO:
+				RB_CalcMacroTexCoords( pStage->bundle[b].texMods[tm].scale, pStage->bundle[b].image[0],
+						       (float *) tess.svars.texcoords[b] );
+				break;
+
 			case TMOD_SCALE:
 				RB_CalcScaleTexCoords( pStage->bundle[b].texMods[tm].scale,
 						       (float *) tess.svars.texcoords[b] );

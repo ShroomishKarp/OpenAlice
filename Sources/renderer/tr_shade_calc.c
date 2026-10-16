@@ -1043,6 +1043,67 @@ void RB_CalcScaleTexCoords( const float scale[2], float *st )
 /*
 ** RB_CalcScrollTexCoords
 */
+/*
+** tcMod offset <s> <t>: a fixed shift. A value of 1234567 means "take it from
+** the entity" (shaderTexCoord), as in the original.
+*/
+void RB_CalcOffsetTexCoords( const float offset[2], float *st )
+{
+	float o[2];
+	int   i;
+
+	for( i = 0; i < 2; i++ )
+	{
+		o[i] = offset[i] == 1234567.0f ? backEnd.currentEntity->e.shaderTexCoord[i] : offset[i];
+	}
+	for( i = 0; i < tess.numVertexes; i++, st += 2 )
+	{
+		st[0] += o[0];
+		st[1] += o[1];
+	}
+}
+
+/*
+** tcMod macro <s> <t>: texture coordinates from the world position, projected
+** along the axis the vertex normal points most to (the usual Quake texture
+** projection). The texture covers s and t times its own size.
+*/
+void RB_CalcMacroTexCoords( const float scale[2], const image_t *image, float *st )
+{
+	static const float baseaxis[18][3] = {
+		{ 0, 0, 1 }, { 1, 0, 0 }, { 0, -1, 0 },  // floor
+		{ 0, 0, -1 }, { 1, 0, 0 }, { 0, -1, 0 }, // ceiling
+		{ 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 },  // west wall
+		{ -1, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }, // east wall
+		{ 0, 1, 0 }, { 1, 0, 0 }, { 0, 0, -1 },  // south wall
+		{ 0, -1, 0 }, { 1, 0, 0 }, { 0, 0, -1 }  // north wall
+	};
+	const float *xyz = tess.xyz[0];
+	const float *nrm = tess.normal[0];
+	float       w = image && image->width ? ( float )image->width : 1.0f;
+	float       h = image && image->height ? ( float )image->height : 1.0f;
+	int         i, k;
+
+	for( i = 0; i < tess.numVertexes; i++, xyz += 4, nrm += 4, st += 2 )
+	{
+		float best = -99999.0f;
+		int   bestAxis = 0;
+
+		for( k = 0; k < 6; k++ )
+		{
+			float d = DotProduct( nrm, baseaxis[k * 3] );
+
+			if( d > best )
+			{
+				best = d;
+				bestAxis = k;
+			}
+		}
+		st[0] = DotProduct( xyz, baseaxis[bestAxis * 3 + 1] ) * scale[0] / w;
+		st[1] = DotProduct( xyz, baseaxis[bestAxis * 3 + 2] ) * scale[1] / h;
+	}
+}
+
 void RB_CalcScrollTexCoords( const float scrollSpeed[2], float *st )
 {
 	int   i;
